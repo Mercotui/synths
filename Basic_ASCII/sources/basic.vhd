@@ -17,9 +17,7 @@ entity basic is
     dig0 : out std_logic_vector(7 downto 0);
     dig1 : out std_logic_vector(7 downto 0);
     dig2 : out std_logic_vector(7 downto 0);
-    dig3 : out std_logic_vector(7 downto 0);
-    dig4 : out std_logic_vector(7 downto 0);
-    dig5 : out std_logic_vector(7 downto 0)
+    dig3 : out std_logic_vector(7 downto 0)
   );
 end basic;
 
@@ -56,9 +54,9 @@ begin
     key => key,
     audiol => audiol,
     audior => audior,
-    dig2 => dig2,
-    dig3 => dig3,
-    dig4 => dig4,
-    dig5 => dig5
+    dig2 => dig0,
+    dig3 => dig1,
+    dig4 => dig2,
+    dig5 => dig3
   );
 end basic_struct;
