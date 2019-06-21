@@ -1,142 +1,103 @@
---------------------------------------------------------------------------------
--- PROJECT: SIMPLE UART FOR FPGA
---------------------------------------------------------------------------------
--- MODULE:  TESTBANCH OF UART TOP MODULE
--- AUTHORS: Jakub Cabal <jakubcabal@gmail.com>
--- LICENSE: The MIT License (MIT), please read LICENSE file
--- WEBSITE: https://github.com/jakubcabal/uart-for-fpga
---------------------------------------------------------------------------------
+LIBRARY IEEE;
+USE IEEE.STD_LOGIC_1164.ALL;
 
-library IEEE;
-use IEEE.STD_LOGIC_1164.ALL;
-use IEEE.NUMERIC_STD.ALL;
+ENTITY uart_test IS
+Generic (
+    tb_clk_freq      : integer := 50e6;   -- set system clock frequency in hz
+    tb_baud_rate     : integer := 31250; -- baud rate value
+    tb_parity_bit    : string  := "none"; -- legal values: "none", "even", "odd", "mark", "space"
+    tb_use_debouncer : boolean := false    -- enable/disable debouncer
+);
+END uart_test;
 
-entity UART_TB is
-end UART_TB;
+ARCHITECTURE test OF uart_test IS
+  SIGNAL tb_reset : STD_LOGIC := '0';
+  SIGNAL tb_not_reset : STD_LOGIC := '1';
+  SIGNAL tb_clk : STD_LOGIC := '0';
+  SIGNAL tb_uart_rx : STD_LOGIC := '1';
+  SIGNAL tb_uart_tx : STD_LOGIC := '1';
+  SIGNAL tb_key : STD_LOGIC_VECTOR(7 downto 0) := "00000000";
+  SIGNAL tb_key_ready : STD_LOGIC := '0';
+  SIGNAL tb_key_valid : STD_LOGIC := '0';
+  SIGNAL tb_frame_error : STD_LOGIC := '0';
+  SIGNAL tb_finished : BOOLEAN := FALSE;
 
-architecture FULL of UART_TB is
+  PROCEDURE send_byte(  CONSTANT byte : IN STD_LOGIC_VECTOR(7 DOWNTO 0);
+                        SIGNAL uart_tx : OUT STD_LOGIC)
+  IS
+    constant uart_period : time := 32000 ns;
+  BEGIN
+  uart_tx <= '0'; -- start bit
+  wait for uart_period;
 
-	signal CLK           : std_logic;
-	signal RST           : std_logic;
-	signal tx_uart       : std_logic;
-	signal rx_uart       : std_logic;
-	signal din           : std_logic_vector(7 downto 0);
-	signal din_vld       : std_logic;
-	signal din_rdy       : std_logic;
-	signal dout          : std_logic_vector(7 downto 0);
-	signal dout_vld      : std_logic;
-	signal frame_error   : std_logic;
-  signal testbench_tx_finished : boolean := false;
-  signal testbench_rx_finished : boolean := false;
-  constant clk_period  : time := 20 ns;
-	constant uart_period : time := 8680.56 ns;
-	constant data_value  : std_logic_vector(7 downto 0) := "10100111";
-	constant data_value2 : std_logic_vector(7 downto 0) := "00110110";
+  for i in 0 to (byte'LENGTH-1) loop
+      uart_tx <= byte(i); -- data bits
+      wait for uart_period;
+  end loop;
 
-begin
+  uart_tx <= '1'; -- stop bit
+  wait for uart_period;
+  END send_byte;
+BEGIN
 
-	utt: entity work.UART
-    generic map (
-        CLK_FREQ    => 50e6,
-        BAUD_RATE   => 115200,
-        PARITY_BIT  => "none"
-    )
-    port map (
-        CLK         => CLK,
-        RST         => RST,
-        -- UART INTERFACE
-        UART_TXD    => tx_uart,
-        UART_RXD    => rx_uart,
-        -- USER DATA INPUT INTERFACE
-		DIN         => din,
-        DIN_VLD     => din_vld,
-        DIN_RDY     => din_rdy,
-        -- USER DATA OUTPUT INTERFACE
-        DOUT        => dout,
-        DOUT_VLD    => dout_vld,
-        FRAME_ERROR => frame_error
-    );
+tb_not_reset <= not tb_reset;
 
-	clk_process : process
-	begin
-    if not (testbench_tx_finished and testbench_rx_finished) then
-  		CLK <= '0';
-  		wait for clk_period/2;
-  		CLK <= '1';
-  		wait for clk_period/2;
-    else
-      wait;
-    end if;
-	end process;
+DUT: ENTITY work.uart
+  generic map (
+    CLK_FREQ => tb_clk_freq,
+    BAUD_RATE => tb_baud_rate,
+    PARITY_BIT => tb_parity_bit,
+    USE_DEBOUNCER => tb_use_debouncer
+  )
+  PORT MAP(
+    CLK         => tb_clk,
+    RST         => tb_not_reset,
+    -- UART INTERFACE
+    UART_TXD    => tb_uart_tx,
+    UART_RXD    => tb_uart_rx,
+    -- USER DATA OUTPUT INTERFACE
+    DOUT        => tb_key,
+    DOUT_VLD    => tb_key_ready,
+    FRAME_ERROR => tb_frame_error,
+    -- USER DATA INPUT INTERFACE
+    DIN         => tb_key,
+    DIN_VLD     => tb_key_valid,
+    DIN_RDY     => tb_key_ready
+  );
 
-	rst_gen_p : process
-	begin
-		RST <= '1';
-		wait for clk_period*3;
-      	RST <= '0';
-		wait;
-	end process;
+  clk_generation : PROCESS
+	-- Constants for clock generation
+	CONSTANT clk_frequency : integer := 50000000;
+	CONSTANT clk_period : time := 1 sec / clk_frequency;
+	CONSTANT clk_half_period : time := clk_period / 2;
+	BEGIN
+  		IF NOT tb_finished THEN
+  			tb_clk <= '1';
+  			WAIT FOR clk_half_period;
+  			tb_clk <= '0';
+  			WAIT FOR clk_half_period;
+  			ELSE
+  				WAIT;
+  		END IF;
+	END PROCESS clk_generation;
 
-	test_rx_uart : process
-	begin
-		rx_uart <= '1';
 
-		wait until RST = '0';
-		wait until rising_edge(CLK);
+  testinput:PROCESS
+  BEGIN
+    -- Reset DUT
+    tb_reset <= '0';
+    WAIT FOR 100 ns;
+    tb_reset <= '1';
 
-		rx_uart <= '0'; -- start bit
-		wait for uart_period;
+    WAIT FOR 1 ms;
 
-		for i in 0 to (data_value'LENGTH-1) loop
-			rx_uart <= data_value(i); -- data bits
-			wait for uart_period;
-		end loop;
+    -- Start test
 
-		rx_uart <= '1'; -- stop bit
-		wait for uart_period;
+    send_byte(X"09", tb_uart_rx); -- press TAB
+    wait for 10 ms;
 
-		rx_uart <= '0'; -- start bit
-		wait for uart_period;
-
-		for i in 0 to (data_value2'LENGTH-1) loop
-			rx_uart <= data_value2(i); -- data bits
-			wait for uart_period;
-		end loop;
-
-		rx_uart <= '1'; -- stop bit
-		wait for uart_period;
-
-    testbench_rx_finished <= true;
-		wait;
-
-	end process;
-
-	test_tx_uart : process
-	begin
-		din <= data_value;
-		din_vld <= '0';
-
-		wait until RST = '0';
-		wait until rising_edge(CLK);
-		din_vld <= '1';
-
-		wait until rising_edge(CLK);
-		din_vld <= '0';
-
-		wait until rising_edge(CLK);
-		wait for 80 us;
-
-		wait until rising_edge(CLK);
-		din_vld <= '1';
-		din <= data_value2;
-
-		wait until rising_edge(CLK);
-		din_vld <= '0';
-
-		wait until rising_edge(CLK);
-
-    testbench_tx_finished <= true;
-		wait;
-	end process;
-
-end FULL;
+    -- End simulation by stopping clock and waiting forever
+    tb_finished <= TRUE;
+    WAIT;
+  END PROCESS testinput;
+END test;

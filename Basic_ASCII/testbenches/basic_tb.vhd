@@ -16,7 +16,7 @@ ARCHITECTURE test OF basic_test IS
   PROCEDURE send_byte(  CONSTANT byte : IN STD_LOGIC_VECTOR(7 DOWNTO 0);
                         SIGNAL uart_tx : OUT STD_LOGIC)
   IS
-    constant uart_period : time := 8680.56 ns;
+    constant uart_period : time := 32000 ns;
   BEGIN
   uart_tx <= '0'; -- start bit
   wait for uart_period;
@@ -66,11 +66,13 @@ DUT: ENTITY work.basic
   BEGIN
     -- Reset DUT
     tb_reset <= '0';
-    WAIT FOR 20 ns;
+    WAIT FOR 100 ns;
     tb_reset <= '1';
 
     -- Start test
 
+    send_byte(X"70", tb_uart_rx); -- press TAB
+    wait for 20 ms;
     send_byte(X"09", tb_uart_rx); -- press TAB
     wait for 10 ms;
 
